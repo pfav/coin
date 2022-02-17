@@ -1,0 +1,4 @@
+/node_modules/
+/www/bundle/
+
+.DS_Store

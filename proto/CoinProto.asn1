@@ -1,0 +1,55 @@
+CoinProto DEFINITIONS AUTOMATIC TAGS ::=
+BEGIN
+
+Hash ::= OCTET STRING ( SIZE(64) )
+PublicKey ::= OCTET STRING ( SIZE(32) )
+
+BranchSet ::= SEQUENCE SIZE(1..256) OF SEQUENCE{
+  slot INTEGER,
+  branch Branch,
+  ...
+}
+
+Branch ::= SEQUENCE {
+   latest-hash Hash,
+   current-difficulty INTEGER,
+   cumulative-difficulty INTEGER,
+   length INTEGER,
+   coinbase INTEGER,
+   supply INTEGER,
+   ...
+}
+
+Block ::= SEQUENCE {
+   version INTEGER,
+   index   INTEGER,
+   hash    Hash OPTIONAL,
+   prev-hash Hash,
+   timestamp INTEGER,
+   transactions SEQUENCE SIZE(1..4096) OF Transaction OPTIONAL,
+   nonce INTEGER,
+   difficulty INTEGER,
+   ...
+}
+
+Transaction ::= SEQUENCE {
+    hash    Hash,
+    in      SEQUENCE SIZE(1..128) OF TransactionIn,
+    out     SEQUENCE SIZE(1..128) OF TransactionOut,
+    ...
+}
+
+TransactionIn ::= SEQUENCE {
+   out-hash    OCTET STRING OPTIONAL,
+   out-index   INTEGER,
+   signature   OCTET STRING OPTIONAL,
+   ...
+}
+
+TransactionOut ::= SEQUENCE {
+    address    PublicKey,
+    amount     INTEGER,
+    ...
+}
+
+END

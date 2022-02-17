@@ -1,0 +1,4 @@
+-sname coin
++K true
++A30
++S ${SCHEDULERS:-0}

@@ -1,0 +1,19 @@
+{application, coin,
+ [{description, "Basic Crypto Coin"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {coin_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    sasl,
+    gproc,
+    cowboy,
+    gun
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.

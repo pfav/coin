@@ -1,0 +1,7 @@
+[
+  {kernel, [
+    {logger_level, ${LOGGER_LEVEL:-notice}}
+ ]}
+].
+
+

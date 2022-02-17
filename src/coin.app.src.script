@@ -1,0 +1,6 @@
+Sources = filelib:wildcard("src/**/*.erl") ++ filelib:wildcard("src/*.erl"),
+Modules = [list_to_atom(filename:rootname(filename:basename(F))) || F <- Sources],
+
+[{application, coin, Cfg}] = CONFIG,
+NewCfg = lists:keystore(modules, 1, Cfg, {modules, Modules}),
+[{application, coin, NewCfg}].
