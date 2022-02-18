@@ -1,0 +1,354 @@
+= BITCOIN (almost)
+
+===============================================================================
+Blockchain
+===============================================================================
+
+  block#0                        block#1                        block#2
+
+  + --------------- +            + --------------- +            + --------------- +
+  | height: 0       |            | height: 1       |            | height: 2       |
+  | hash: aaaa      | <----      | hash: bbbb      | <----      | hash: cccc      |
+  | prev_hash: 0000 |     | ____ | prev_hash: aaaa |     | ____ | prev_hash: bbbb |
+  |       ...       |            |       ...       |            |       ...       |
+  + --------------- +            + --------------- +            + --------------- +
+  genesis block
+
+The BTC blockchain is a linked-list of timestamped, blocks.
+
+A Block contains:
+- height: index of each block in the chain (always +1 the previous)
+- hash: hash of the block
+- prev_hash: hash of previous block on the chain
+- timestamp: timestamp when mined
+- nonce: used in PoW
+- transactions: coin transfer
+- difficulty: how many bits that must be zero in PoW
+
+The first block (block#0) is called `genesis-block` and
+is hard-coded in the application (each node must start with the same genesis-block)
+
+The GENESIS_BLOCK:
+- height == 0
+- hash: must be a valid mined hash
+- prev_hash == 0
+- difficulty == 0
+- timestamp == fixed timestamp (chosen by developer)
+- nonce == value-that-works
+- transactions == [<Initial CoinbaseTX>]
+- difficulty == 1
+
+The blockchain can be forked but never merged.
+When a fork happens the chain with the largest cumulative-difficulty is chosen.
+
+===============================================================================
+Mining
+===============================================================================
+
+After some transactions are ready to be put on a block the block must be added to the blockchain.
+This happens through mining.
+
+Mining basically is the process of finding a hash for the block that has `difficulty` zero bits prefix,
+using a random (or incremental) number (the nonce).
+
+def HASH(block, nonce) {
+   let s = serialize(block, nonce);
+   return HASH256(HASH256(s))
+}
+
+def match_difficulty(hash, difficulty) {
+   for (bit = 0; i < difficulty; i++) {
+      if (bit_value(hash, i) == 1)
+         return false;
+   }
+   return true;
+}
+
+def mine(block) {
+   let nonce = 0;
+   let hash;
+   loop {
+      hash = HASH(block, nonce);
+      if match_difficulty(hash, difficulty) {
+         break;
+      }
+      nonce++; // or nonce = rand_number();
+   }
+
+   block.hash = hash;
+   block.nonce = nonce;
+   return block;
+}
+
+When a block is mined it's ready to be appended to the chain and to be broadcasted to other nodes.
+
+It's possible that there may be collisions during insertion (ie two nodes trying to append to the same block)
+so multiple `branches` of the chain must be kept.
+At a later time the collisions are resolved using the cumulative-difficulty (NAKAMOTO CONSENSUS)
+
+-------------------------------------------------------------------------------
+Cumulative Difficulty (or Nakamoto consensus)
+-------------------------------------------------------------------------------
+
+The cumulative distance of a chain is a value used to compare the cumulative time (difficulty) spent to mine a chain.
+
+The value is the sum of all the difficulties squared.
+
+cumulative_difficulty = SUM ( foreach b in chain: b.difficulty * b.difficulty )
+
+ie.
+
+  [ 2 ] <- [ 2 ] <- [ 3 ] <- [ 3 ] <- [ 4 ]   : fork0 ::= 2*2 + 2*2 + 3*3 + 3*3 + 4*4 = 42
+                           \
+                             [ 4 ] <- [ 4 ]   : fork1 ::= 2*2 + 2*2 + 3*3 + 4*4 + 4*4 = 49
+
+  fork1 will win since it has a cumulative difficulty of 49 which is higher that fork0 (42)
+
+-------------------------------------------------------------------------------
+Adjusted Difficulty
+-------------------------------------------------------------------------------
+
+The difficulty used in PoW is adjusted every 2016 blocks (roughly two weeks) such that the
+average time to mine a block is 10 minutes.
+
+const DIFFICULTY_ADJUSTMENT_INTERVAL = 2016
+const BLOCK_TARGET_INTERVAL = 10 * 60
+
+def get_difficulty(chain) {
+   let latest = chain.latest_block();
+   if latest.height % DIFFICULTY_ADJUSTMENT_INTERVAL == 0 && latest.height != 0 {
+      return calculate_adjusted_difficulty(chain)
+   }
+   return latest.difficulty;
+}
+
+def calculate_adjusted_difficulty(chain) {
+   let latest = chain.latest_block();
+   let prev_generation_last_block = chain.get_by_height( chain.size() - DIFFICULTY_ADJUSTMENT_INTERVAL);
+
+   let time_expected = DIFFICULTY_ADJUSTMENT_INTERVAL * BLOCK_TARGET_INTERVAL;
+   let time_taken = latest.timestamp - prev_generation_last_block.timestamp;
+
+   if time_taken < time_expected / 2 {
+       return prev_generation_last_block.difficulty + 1
+   } else if time_taken > time_expected * 2 {
+       return min( prev_generation_last_block.difficulty - 1, 1);
+   } else {
+       return prev_generation_last_block.difficulty
+   }
+}
+
+-------------------------------------------------------------------------------
+Block Validity
+-------------------------------------------------------------------------------
+
+Before inserting the block is inserted to the chain it must be validated:
+
+- difficulty is equal expected difficulty
+- hash is valid PoW
+- prev_hash exist
+- height match with block from prev_hash
+- transactions are valid
+- the block is not too much in the past of prev block
+
+===============================================================================
+Transactions
+===============================================================================
+
+A transaction is the means of which it's possible to transfer coins.
+Each block has a list of transactions.
+
+A Transaction is composed of:
+
+- hash:         hash of the transaction
+- inputs:       list of previous transaction output used as funds
+- outputs:       list of output recipient to transfer funds
+
+
+-------------------------------------------------------------------------------
+Transaction Creation
+-------------------------------------------------------------------------------
+
+This is better explained with an example :)
+
+
+- Alice Has 10 BTC from another transaction and wants to send Bob 5 BTC
+
+      Alice Creates Transaction
+      -------------------------
+
+      Tx0 (on-chain old)                 |  Tx1 (new)
+      ----------------------------------------------------------
+      HASH: xxxx                         | HASH: yyyy
+                                         |
+      IN: ...                            | IN:
+                                         |    0:
+                                         |     - from_tx_hash: xxxx
+                                         |     - from_tx_index: 0
+                                         |     - signature: SIGN (<ALICE_PRIVKEY>, xxxx + 0 )
+                                         |
+      OUT:                               | OUT:
+         0:                              |    0:
+           - address: <ALICE PUBKEY>     |      - address: <BOB PUBKEY>
+           - amount: 10                  |      - amount: 5
+                                         |    1:
+                                         |      - address: <ALICE PUBKEY>
+                                         |      - amount: 4.5
+
+
+     * step.1
+       Alice has in Tx0 and Output with hers Public Key as address and amount of 10.
+     * step.2.1
+       Alice puts in Tx1 Input[0] the hash of Tx0 and the index of the Tx0 Output referenced (Tx0.output[0]).
+       basically the `from_tx_hash` references the transaction and `from_tx_index` references the output
+       within that transaction.
+     * step.2.2
+       In Tx1 Input[0] sign with Alice Private Key the Hash and index (`from_tx_hash` and `from_tx_index`)
+       and store it in `signature`
+       such that a third party can verity:
+          let in = Tx1.input[0];
+          let tx0 = find_transaction ( in.from_tx_hash );
+          let output = tx0.output[ in.from_tx_index ];
+          VERIFY(output.address, in.from_tx_hash + in.from_tx_index) == true;
+     * step.3.1
+       In Tx1 Output[0] set address to Bob Public Key and amount 5
+     * step.3.2
+       Since Bob just wanted 5 and from the previous transaction we have 10 to not lose coins
+       Alice puts another output to her self, usually called CHANGE.
+       So She stores in Tx1 an Output at index 1 with address Alice Public Key and amount 4.5 (0.5 left as miner fee)
+     * step.4
+       amount(Tx.outputs) must be less-than-or-equal to amount(Tx.inputs)
+     * step.5
+       Send the transaction to a miner
+
+NOTE:
+   Spending is basically getting all YOUR OUTPUTS from transactions and when you want to spend them you put them as INPUTS
+   and you SIGN THEM.
+
+
+     Miner Mines Alice Transaction
+     -----------------------------
+
+     * step.1
+       The miner receives Alice Transaction and creates a block to be mine
+     % step.2
+       The miner Creates a "Coinbase Transaction" with an empty input (this is allowed)
+       and an output to himself with amount the REWARD COINBASE calculated by inspecting the blockchain (see below).
+       Then puts the "Coinbase Transaction" as FIRST transaction in the block.
+     % step.2
+       The miner sums all inputs and outputs of the transaction and sees that 0.5 BTC are going to be lost.
+       The miner is allowed to collect this amount as "Miner Fee".
+       The miner updates the "Coinbase Transaction" amount of the block adding to the REWARD
+       all the "Miner Fee" collected from the transactions in the block.
+     % step.3
+       The miner mines the block and broadcasts (also saves) the block with the hope that it will be appended to the blockchain
+
+
+[???]
+- if we do a man-in-the-middle and get a transaction before a miner and change BOB PUBKEY with ours and hashit
+  and send it to the miner??? won't it be legal?
+  in other words how can you trust the miner not to change the PUBLIC KEY if YOU SHOULDN'T trust anyone???
+
+
+-------------------------------------------------------------------------------
+COINBASE Transaction
+-------------------------------------------------------------------------------
+
+The Coinbase Transaction is the reward given to a miner for mining a block (the miner puts it).
+This transaction must be the first transaction of a block.
+
+The initial Value was 50 BTC
+
+const COIN_BASE = 50;
+
+COINBASE TX:
+  IN:
+    0:
+     - from_tx_hash: 0
+     - from_tx_index: <BLOCK HEIGHT>
+     - signature: ""
+  OUT:
+    1:
+     - address: <MINER PUBKEY>
+     - amount: get_current_coinbase_amount() + miner_fee()
+
+
+// 50% reduction every 210000 blocks, or approximately four year
+def get_current_coinbase_amount(chain) {
+   let generation = (chain.size() / 210000) + 1;
+   return COIN_BASE / generation;
+}
+
+// implicitly get remaining coins
+// NOTE: actually after a defined (large ) size a percentage should be leftover
+def miner_fee(tx) {
+   let fee = 0.0;
+   foreach tx in tx.transactions {
+      let in_amount = sum(tx.inputs);
+      let out_amount = sum(tx.outputs);
+
+      assert(in_amount >= out_amount)
+
+      fee += in_amount - out_amount;
+   }
+
+   return fee;
+}
+
+
+NOTE: The GENESIS BLOCK will have one Transaction; a COINBASE TX
+      This is the way to bootstrap the chain.
+
+===============================================================================
+Wallet
+===============================================================================
+
+So basically a wallet is a keypair where the public_key is OUR address.
+
+The balance is derived iterating the chain ad summing the `amount` from all
+`tx.outputs` with OUR address that are not referenced by `tx.inputs`
+
+or in other words getting the sum of all the unspent outs with OUR address.
+
+Note that this process can be cached.
+
+If we are a miner also all the fees we collected will be added to the balance.
+
+Address = RIPEMD160(SHA256(<PUB KEY>))
+
+BASE58 for easy transcription
+
+
+===============================================================================
+Mempool
+===============================================================================
+
+A mempool or transaction_pool is where wallet-client (non miners) publish their transaction (to miners).
+Miners broadcast transaction received and store them in mempool.
+After a while some transactions are removed from the pool and mined in a block.
+
+===============================================================================
+P2P Gossip
+===============================================================================
+TODO
+
+===============================================================================
+Merkle Tree
+===============================================================================
+TODO
+
+===============================================================================
+BTC Scripts
+===============================================================================
+TODO
+
+
+[references]
+* https://bitcoin.org/bitcoin.pdf
+* https://lhartikk.github.io/
+* https://github.com/bitcoin/bips
+* https://www.blockchain.com/api/blockchain_api
+* https://developer.bitcoin.org/reference/
+* https://www.oreilly.com/library/view/mastering-bitcoin/9781491902639/ch01.html
+* https://en.bitcoin.it/wiki/Main_Page
+* https://bitcointalk.org/index.php?topic=68121.0 (ORIGINAL SOURCE CODE)
