@@ -200,7 +200,8 @@ lookup(Hash) ->
 
 %% lookup_by_index/1 ----------------------------------------------------------
 
--spec lookup_by_index(Index, Hash) -> {ok, Block} | {error, term()} when
+-spec lookup_by_index(Index, Hash)
+            -> {ok, Block} | {error, term()} when
     Index :: non_neg_integer(),
     Hash :: hash(),
     Block :: block().
