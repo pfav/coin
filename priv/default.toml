@@ -1,17 +1,23 @@
 [coin]
+# This node "human" name
 name = "coin-node"
 
 [wallet]
+# path on the filesystem to store wallet keys
 path = "key.db"
 
 [http]
+# admin endpoint
 ip = "127.0.0.1"
 port = 9000
+# number of cowboy acceptors
 acceptor = 4
 
 [chain.db]
+# path on the filesystem to store database
 path = "coin.db"
 
+# Add zero or more to connect and monitor
 # [[peer]]
 # ip = "127.0.0.2"
 # port = 3000
