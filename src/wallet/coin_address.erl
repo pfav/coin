@@ -59,7 +59,7 @@ decode_private(Address) ->
         <<?VERSION_PRIVATE, Bin/binary>> ->
             {ok, strip_checksum(Bin)};
         _ ->
-            {error, invalid}
+            {error, invalid_base58_decoding}
     end.
 
 %% verify/1 -------------------------------------------------------------------
